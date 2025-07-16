@@ -1,0 +1,97 @@
+name: PowerShell Script Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-scripts:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: PowerShell Script Analysis
+      run: |
+        Write-Host "=== PowerShell Script Validation ===" -ForegroundColor Cyan
+        
+        # Test all PowerShell scripts for syntax errors
+        $scripts = Get-ChildItem -Path "scripts", "tests" -Filter "*.ps1" -Recurse
+        $errors = @()
+        
+        foreach ($script in $scripts) {
+          Write-Host "Testing: $($script.Name)" -ForegroundColor Yellow
+          
+          try {
+            # Parse the script to check for syntax errors
+            $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content $script.FullName -Raw), [ref]$null)
+            Write-Host "✓ OK: $($script.Name)" -ForegroundColor Green
+          } catch {
+            Write-Host "✗ ERROR: $($script.Name) - $($_.Exception.Message)" -ForegroundColor Red
+            $errors += "$($script.Name): $($_.Exception.Message)"
+          }
+        }
+        
+        if ($errors.Count -gt 0) {
+          Write-Host "`n=== VALIDATION FAILED ===" -ForegroundColor Red
+          $errors | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+          exit 1
+        } else {
+          Write-Host "`n✓ All PowerShell scripts passed validation!" -ForegroundColor Green
+        }
+    
+    - name: Documentation Check
+      run: |
+        Write-Host "=== Documentation Validation ===" -ForegroundColor Cyan
+        
+        # Check that required documentation files exist
+        $requiredDocs = @(
+          "README.md",
+          "LICENSE",
+          "documentation/GSelector_Marvin_Monitoring_Setup.md",
+          "documentation/GSelector_Marvin_Confluence_Documentation.md"
+        )
+        
+        $missingDocs = @()
+        foreach ($doc in $requiredDocs) {
+          if (Test-Path $doc) {
+            Write-Host "✓ Found: $doc" -ForegroundColor Green
+          } else {
+            Write-Host "✗ Missing: $doc" -ForegroundColor Red
+            $missingDocs += $doc
+          }
+        }
+        
+        if ($missingDocs.Count -gt 0) {
+          Write-Host "`n=== DOCUMENTATION CHECK FAILED ===" -ForegroundColor Red
+          exit 1
+        } else {
+          Write-Host "`n✓ All required documentation files found!" -ForegroundColor Green
+        }
+    
+    - name: Repository Structure Check
+      run: |
+        Write-Host "=== Repository Structure Validation ===" -ForegroundColor Cyan
+        
+        # Check that required directories exist
+        $requiredDirs = @("scripts", "documentation", "tests")
+        $missingDirs = @()
+        
+        foreach ($dir in $requiredDirs) {
+          if (Test-Path $dir -PathType Container) {
+            $fileCount = (Get-ChildItem -Path $dir -Filter "*.ps1","*.md" | Measure-Object).Count
+            Write-Host "✓ Directory: $dir ($fileCount files)" -ForegroundColor Green
+          } else {
+            Write-Host "✗ Missing directory: $dir" -ForegroundColor Red
+            $missingDirs += $dir
+          }
+        }
+        
+        if ($missingDirs.Count -gt 0) {
+          Write-Host "`n=== STRUCTURE CHECK FAILED ===" -ForegroundColor Red
+          exit 1
+        } else {
+          Write-Host "`n✓ Repository structure is correct!" -ForegroundColor Green
+        }
